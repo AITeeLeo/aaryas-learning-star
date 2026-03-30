@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Aarya's Star">
+  <meta name="theme-color" content="#7C3AED">
+  <meta name="description" content="Aarya's Learning Star — interactive quiz app for Grade 3-4">
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <link rel="stylesheet" href="css/styles.css?v=3">
+  <link rel="stylesheet" href="css/animations.css?v=3">
+
+  <title>Aarya's Learning Star ⭐</title>
+</head>
+<body>
+  <div id="app">
+    <!-- Screens are rendered dynamically by app.js -->
+    <div id="loading-screen" class="screen active">
+      <div class="mascot mascot-bounce">⭐</div>
+      <p class="loading-text">Loading...</p>
+    </div>
+  </div>
+
+  <!-- Confetti canvas overlay -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- PDF.js loaded from CDN (only needed for parent PDF upload) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+
+  <!-- App modules -->
+  <script src="js/questions.js?v=3"></script>
+  <script src="js/storage.js?v=3"></script>
+  <script src="js/tts.js?v=3"></script>
+  <script src="js/sounds.js?v=3"></script>
+  <script src="js/confetti.js?v=3"></script>
+  <script src="js/read-aloud.js?v=3"></script>
+  <script src="js/quiz.js?v=3"></script>
+  <script src="js/screens.js?v=3"></script>
+  <script src="js/pdf-upload.js?v=3"></script>
+  <script src="js/app.js?v=3"></script>
+</body>
+</html>

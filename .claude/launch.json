@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "aaryas-learning-star",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8080", "--directory", "/Users/teeahanderson/Claude/aaryas-learning-star"],
+      "port": 8080
+    }
+  ]
+}

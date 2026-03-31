@@ -734,9 +734,9 @@ const Screens = (() => {
   }
 
   function renderSettingsContent() {
-    const apiKey = Storage.getAPIKey();
     const hasWeekly = Storage.hasWeeklyTest();
     const weeklyDate = Storage.getWeeklyDate();
+    const savedPdfText = Storage.getUploadedPdfText();
 
     return `
       <div class="settings-screen">
@@ -747,33 +747,41 @@ const Screens = (() => {
         </div>
 
         <div class="settings-content">
-          <!-- API Key -->
-          <div class="settings-group slide-up">
-            <label>Claude API Key</label>
-            <input type="password" id="api-key-input" value="${apiKey}"
-                   placeholder="sk-ant-api03-..."
-                   oninput="Storage.setAPIKey(this.value)">
-            <div class="help-text">Required for generating quiz questions from uploaded PDFs. Your key is stored only on this device.</div>
-          </div>
-
           <!-- PDF Upload -->
-          <div class="settings-group slide-up slide-up-delay-1">
-            <label>📄 Upload Weekly Test PDF</label>
+          <div class="settings-group slide-up">
+            <label>📄 Upload Study Material PDF</label>
             ${hasWeekly ? `<div class="upload-status success" style="margin-bottom:12px">
               ✅ Current test: Week of ${weeklyDate}
             </div>` : ''}
             <div class="upload-area" id="upload-area">
               <span class="upload-icon">📤</span>
               <span class="upload-text">Tap to upload PDF</span>
-              <span class="upload-hint">Abeka weekly test PDF</span>
+              <span class="upload-hint">Upload Abeka test/study PDF to view topics</span>
               <input type="file" accept=".pdf" id="pdf-input"
                      onchange="PdfUpload.handleFile(this.files[0])">
             </div>
             <div id="upload-status-area"></div>
+            <div id="pdf-content-area">${savedPdfText ? '<div class="upload-status success" style="margin-top:12px">Previously uploaded PDF content is saved. Upload a new PDF to update.</div>' : ''}</div>
+          </div>
+
+          <!-- Parent Dashboard Link -->
+          <div class="settings-group slide-up slide-up-delay-1">
+            <label>📊 Parent Dashboard</label>
+            <button class="btn btn-primary btn-block"
+                    onclick="App.showParentDashboard()">
+              View Learning Report
+            </button>
+            <div class="help-text">See Aarya's progress, strengths, and areas to improve.</div>
+          </div>
+
+          <!-- Cloud Sync -->
+          <div class="settings-group slide-up slide-up-delay-2">
+            <label>📱 View Progress From Your Phone</label>
+            ${renderSyncSettings()}
           </div>
 
           <!-- Change PIN -->
-          <div class="settings-group slide-up slide-up-delay-2">
+          <div class="settings-group slide-up slide-up-delay-3">
             <label>Change PIN</label>
             <button class="btn btn-secondary btn-small"
                     onclick="Storage.setPIN(null); App.showSettings();">
@@ -781,6 +789,488 @@ const Screens = (() => {
             </button>
           </div>
         </div>
+      </div>
+    `;
+  }
+
+  // ============================================
+  // PARENT DASHBOARD
+  // ============================================
+  function renderParentDashboard() {
+    const progress = Storage.getProgress();
+    const totalStars = Storage.getTotalStars();
+    const history = Storage.getHistory();
+    const streak = Storage.getStreak();
+    const weaknesses = Storage.getWeaknesses();
+    const learningPath = Storage.getLearningPath();
+    const activityLog = Storage.getActivityLog();
+    const readAloudStats = Storage.getReadAloudStats();
+
+    const subjects = ['math', 'english', 'reading', 'science', 'history'];
+
+    // Excelling subjects (>= 75% accuracy with at least 5 questions)
+    const excelling = [];
+    const struggling = [];
+    subjects.forEach(s => {
+      const data = progress[s];
+      if (!data || data.questionsAnswered < 3) return;
+      const accuracy = data.correctAnswers / data.questionsAnswered;
+      if (accuracy >= 0.75) {
+        excelling.push({ subject: s, accuracy: Math.round(accuracy * 100), stars: data.stars, answered: data.questionsAnswered });
+      } else {
+        struggling.push({ subject: s, accuracy: Math.round(accuracy * 100), stars: data.stars, answered: data.questionsAnswered });
+      }
+    });
+
+    // Subjects not yet attempted
+    const notStarted = subjects.filter(s => !progress[s] || progress[s].questionsAnswered === 0);
+
+    // Recent activity (last 20 from history)
+    const recentHistory = history.slice(-20).reverse();
+
+    // Build excelling section
+    let excellingHTML = '';
+    if (excelling.length > 0) {
+      excellingHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">🌟 Excelling In</div>
+          ${excelling.map(e => `
+            <div class="parent-stat-row good">
+              <span class="parent-stat-emoji">${SUBJECTS[e.subject]?.emoji}</span>
+              <div class="parent-stat-info">
+                <div class="parent-stat-name">${SUBJECTS[e.subject]?.name}</div>
+                <div class="parent-stat-detail">${e.accuracy}% accuracy · ${e.answered} questions · ${e.stars} stars</div>
+              </div>
+              <span class="parent-stat-badge good">${e.accuracy}%</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Build struggling section
+    let strugglingHTML = '';
+    if (struggling.length > 0) {
+      strugglingHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">📌 Needs More Practice</div>
+          ${struggling.map(s => `
+            <div class="parent-stat-row warn">
+              <span class="parent-stat-emoji">${SUBJECTS[s.subject]?.emoji}</span>
+              <div class="parent-stat-info">
+                <div class="parent-stat-name">${SUBJECTS[s.subject]?.name}</div>
+                <div class="parent-stat-detail">${s.accuracy}% accuracy · ${s.answered} questions · ${s.stars} stars</div>
+              </div>
+              <span class="parent-stat-badge warn">${s.accuracy}%</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    // Not started section
+    let notStartedHTML = '';
+    if (notStarted.length > 0) {
+      notStartedHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">🆕 Not Yet Explored</div>
+          <div class="parent-not-started">
+            ${notStarted.map(s => `<span class="parent-chip">${SUBJECTS[s]?.emoji} ${SUBJECTS[s]?.name}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Activity log
+    let activityHTML = '';
+    const combinedActivity = recentHistory.map(h => ({
+      icon: h.correct ? '✅' : '❌',
+      text: `${SUBJECTS[h.subject]?.name || h.subject} — ${h.correct ? 'Correct' : 'Missed'}: "${h.correctAnswer}"`,
+      date: h.date,
+      type: 'quiz'
+    }));
+
+    // Add activity log entries
+    activityLog.slice(-10).reverse().forEach(entry => {
+      combinedActivity.push({
+        icon: entry.icon || '📝',
+        text: entry.text,
+        date: `${entry.date} ${entry.time}`,
+        type: 'log'
+      });
+    });
+
+    // Sort by most recent
+    const displayActivity = combinedActivity.slice(0, 15);
+
+    if (displayActivity.length > 0) {
+      activityHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">📝 Recent Activity</div>
+          <div class="parent-activity-log">
+            ${displayActivity.map(a => `
+              <div class="parent-activity-row">
+                <span class="parent-activity-icon">${a.icon}</span>
+                <div class="parent-activity-text">${a.text}</div>
+                <div class="parent-activity-date">${a.date}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Recommendations
+    let recsHTML = '';
+    const recs = [];
+
+    if (struggling.length > 0) {
+      struggling.forEach(s => {
+        recs.push(`Practice more <strong>${SUBJECTS[s.subject]?.name}</strong> — currently at ${s.accuracy}% accuracy. Try the easy difficulty first to build confidence.`);
+      });
+    }
+    if (notStarted.length > 0) {
+      recs.push(`Encourage Aarya to try <strong>${notStarted.map(s => SUBJECTS[s]?.name).join(', ')}</strong> — she hasn't started ${notStarted.length === 1 ? 'this subject' : 'these subjects'} yet.`);
+    }
+    const wrongCount = Storage.getUnresolvedWrongIds().length;
+    if (wrongCount > 0) {
+      recs.push(`There are <strong>${wrongCount} missed questions</strong> to review. Use the "Practice What You Missed" feature on the home screen.`);
+    }
+    if (excelling.length > 0) {
+      excelling.forEach(e => {
+        if (e.accuracy >= 90) {
+          recs.push(`Aarya is doing great in <strong>${SUBJECTS[e.subject]?.name}</strong>! Consider trying the <strong>Hard</strong> difficulty to challenge her further.`);
+        }
+      });
+    }
+    if (readAloudStats) {
+      const raAccPct = Math.round(readAloudStats.avgAccuracy * 100);
+      if (raAccPct < 70) {
+        recs.push(`Read Aloud accuracy is at <strong>${raAccPct}%</strong>. Regular reading practice (even 5 minutes/day) will help improve fluency.`);
+      } else if (readAloudStats.trend === 'improving') {
+        recs.push(`Read Aloud is <strong>improving</strong> — great progress! Keep the daily reading habit going.`);
+      }
+    }
+    if (streak.count >= 3) {
+      recs.push(`Amazing! Aarya has a <strong>${streak.count}-day learning streak</strong>. Keep it going!`);
+    } else if (streak.count === 0) {
+      recs.push(`Try to build a <strong>daily learning streak</strong> — even one quiz per day makes a big difference.`);
+    }
+
+    if (recs.length > 0) {
+      recsHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">💡 Recommendations</div>
+          <div class="parent-recs-list">
+            ${recs.map(r => `<div class="parent-rec-item">${r}</div>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Read aloud stats
+    let readAloudHTML = '';
+    if (readAloudStats) {
+      readAloudHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">🎤 Read Aloud Summary</div>
+          <div class="parent-ra-stats">
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${readAloudStats.totalAttempts}</div>
+              <div class="parent-ra-label">Sessions</div>
+            </div>
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${Math.round(readAloudStats.avgAccuracy * 100)}%</div>
+              <div class="parent-ra-label">Avg Accuracy</div>
+            </div>
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${Math.round(readAloudStats.avgWPM)}</div>
+              <div class="parent-ra-label">Avg WPM</div>
+            </div>
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${readAloudStats.trend === 'improving' ? '📈' : readAloudStats.trend === 'declining' ? '📉' : '➡️'}</div>
+              <div class="parent-ra-label">Trend</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="parent-dashboard">
+        <div class="dash-header">
+          <button class="back-btn" onclick="App.showSettings()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-light)">←</button>
+          <h2 style="font-size:1.3rem;font-weight:700;color:var(--purple-dark)">Parent Dashboard</h2>
+          <div style="width:32px"></div>
+        </div>
+
+        <div class="parent-hero slide-up">
+          <div class="parent-hero-star">⭐ ${totalStars}</div>
+          <div class="parent-hero-label">Total Stars Earned</div>
+          <div class="parent-hero-sub">${history.length} questions answered · ${streak.count}-day streak</div>
+        </div>
+
+        ${excellingHTML}
+        ${strugglingHTML}
+        ${notStartedHTML}
+        ${readAloudHTML}
+        ${recsHTML}
+        ${activityHTML}
+      </div>
+    `;
+  }
+
+  // ============================================
+  // CLOUD SYNC SETTINGS
+  // ============================================
+  function renderSyncSettings() {
+    if (CloudSync.isSyncEnabled()) {
+      const code = CloudSync.getFamilyCode();
+      return `
+        <div class="sync-active">
+          <div class="sync-status-ok">✅ Cloud sync is active</div>
+          <div class="family-code-display">
+            <div class="family-code-label">Your Family Code:</div>
+            <div class="family-code-value" id="family-code">${code}</div>
+            <button class="btn btn-secondary btn-small" onclick="App.copyFamilyCode()">📋 Copy Code</button>
+          </div>
+          <div class="help-text" style="margin-top:12px">
+            <strong>To view from your phone:</strong><br>
+            1. Open the app on your phone<br>
+            2. Tap ⚙️ Settings → enter your PIN<br>
+            3. Tap "View From Another Device"<br>
+            4. Enter the family code above
+          </div>
+          <button class="btn btn-secondary btn-small" style="margin-top:12px"
+                  onclick="CloudSync.syncNow(); this.textContent='✅ Synced!';">
+            🔄 Sync Now
+          </button>
+        </div>
+      `;
+    }
+
+    // Not enabled yet — one tap to enable
+    return `
+      <div class="sync-setup" style="text-align:center">
+        <p style="font-size:0.9rem;color:var(--text-light);margin-bottom:12px">
+          Sync Aarya's progress to the cloud so you can check it from your phone.
+        </p>
+        <button class="btn btn-primary btn-block" onclick="App.enableSync()">
+          Enable Cloud Sync
+        </button>
+        <div id="sync-enable-status" style="margin-top:12px"></div>
+        <div style="margin-top:16px;border-top:1px solid #E5E7EB;padding-top:12px">
+          <p style="font-size:0.85rem;color:var(--text-light);margin-bottom:8px">Already enabled on Aarya's device?</p>
+          <button class="btn btn-secondary btn-block btn-small" onclick="App.showRemoteViewer()">
+            View From Another Device
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  // ============================================
+  // REMOTE VIEWER (parent's phone)
+  // ============================================
+  function renderRemoteViewer() {
+    return `
+      <div class="settings-screen">
+        <div class="dash-header">
+          <button class="back-btn" onclick="App.showSettings()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-light)">←</button>
+          <h2 style="font-size:1.3rem;font-weight:700;color:var(--purple-dark)">View Progress</h2>
+          <div style="width:32px"></div>
+        </div>
+
+        <div class="settings-content">
+          <div class="settings-group" style="text-align:center">
+            <div class="mascot mascot-sm" style="margin-bottom:12px">📱</div>
+            <h3 style="font-size:1.1rem;margin-bottom:8px">Enter Family Code</h3>
+            <p style="font-size:0.9rem;color:var(--text-light);margin-bottom:16px">
+              Enter the 6-character code shown on Aarya's device
+            </p>
+
+            <input type="text" id="remote-code-input" class="family-code-input"
+                   placeholder="ABC123" maxlength="6"
+                   style="text-transform:uppercase;text-align:center;font-size:1.5rem;font-weight:800;letter-spacing:6px"
+                   oninput="this.value = this.value.toUpperCase().replace(/[^A-Z0-9]/g, '')">
+
+            <div id="remote-viewer-status" style="margin:12px 0"></div>
+
+            <button class="btn btn-primary btn-block" onclick="App.fetchRemoteProgress()">
+              View Dashboard
+            </button>
+
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ============================================
+  // REMOTE PARENT DASHBOARD (read-only, from cloud data)
+  // ============================================
+  function renderRemoteParentDashboard(data) {
+    const progress = data.progress || {};
+    const totalStars = data.totalStars || 0;
+    const history = data.history || [];
+    const streak = data.streak || { count: 0 };
+    const activityLog = data.activityLog || [];
+    const lastSync = data.lastSyncFormatted || 'Unknown';
+
+    const subjects = ['math', 'english', 'reading', 'science', 'history'];
+
+    const excelling = [];
+    const struggling = [];
+    subjects.forEach(s => {
+      const d = progress[s];
+      if (!d || d.questionsAnswered < 3) return;
+      const accuracy = d.correctAnswers / d.questionsAnswered;
+      if (accuracy >= 0.75) {
+        excelling.push({ subject: s, accuracy: Math.round(accuracy * 100), stars: d.stars, answered: d.questionsAnswered });
+      } else {
+        struggling.push({ subject: s, accuracy: Math.round(accuracy * 100), stars: d.stars, answered: d.questionsAnswered });
+      }
+    });
+
+    const notStarted = subjects.filter(s => !progress[s] || progress[s].questionsAnswered === 0);
+
+    // Build excelling section
+    let excellingHTML = '';
+    if (excelling.length > 0) {
+      excellingHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">🌟 Excelling In</div>
+          ${excelling.map(e => `
+            <div class="parent-stat-row good">
+              <span class="parent-stat-emoji">${SUBJECTS[e.subject]?.emoji}</span>
+              <div class="parent-stat-info">
+                <div class="parent-stat-name">${SUBJECTS[e.subject]?.name}</div>
+                <div class="parent-stat-detail">${e.accuracy}% accuracy · ${e.answered} questions · ${e.stars} stars</div>
+              </div>
+              <span class="parent-stat-badge good">${e.accuracy}%</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    let strugglingHTML = '';
+    if (struggling.length > 0) {
+      strugglingHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">📌 Needs More Practice</div>
+          ${struggling.map(s => `
+            <div class="parent-stat-row warn">
+              <span class="parent-stat-emoji">${SUBJECTS[s.subject]?.emoji}</span>
+              <div class="parent-stat-info">
+                <div class="parent-stat-name">${SUBJECTS[s.subject]?.name}</div>
+                <div class="parent-stat-detail">${s.accuracy}% accuracy · ${s.answered} questions · ${s.stars} stars</div>
+              </div>
+              <span class="parent-stat-badge warn">${s.accuracy}%</span>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }
+
+    let notStartedHTML = '';
+    if (notStarted.length > 0) {
+      notStartedHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">🆕 Not Yet Explored</div>
+          <div class="parent-not-started">
+            ${notStarted.map(s => `<span class="parent-chip">${SUBJECTS[s]?.emoji} ${SUBJECTS[s]?.name}</span>`).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Recent activity
+    const recentHistory = (Array.isArray(history) ? history : []).slice(-15).reverse();
+    let activityHTML = '';
+    const combinedActivity = recentHistory.map(h => ({
+      icon: h.correct ? '✅' : '❌',
+      text: `${SUBJECTS[h.subject]?.name || h.subject} — ${h.correct ? 'Correct' : 'Missed'}: "${h.correctAnswer}"`,
+      date: h.date
+    }));
+
+    (Array.isArray(activityLog) ? activityLog : []).slice(-10).reverse().forEach(entry => {
+      combinedActivity.push({
+        icon: entry.icon || '📝',
+        text: entry.text,
+        date: `${entry.date} ${entry.time}`
+      });
+    });
+
+    if (combinedActivity.length > 0) {
+      activityHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">📝 Recent Activity</div>
+          <div class="parent-activity-log">
+            ${combinedActivity.slice(0, 15).map(a => `
+              <div class="parent-activity-row">
+                <span class="parent-activity-icon">${a.icon}</span>
+                <div class="parent-activity-text">${a.text}</div>
+                <div class="parent-activity-date">${a.date}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    // Read aloud stats from cloud data
+    let readAloudHTML = '';
+    const raHistory = data.readAloud || [];
+    if (Array.isArray(raHistory) && raHistory.length > 0) {
+      const totalAttempts = raHistory.length;
+      const avgAccuracy = Math.round((raHistory.reduce((s, h) => s + h.overallAccuracy, 0) / totalAttempts) * 100);
+      const avgWPM = Math.round(raHistory.reduce((s, h) => s + h.wordsPerMinute, 0) / totalAttempts);
+      readAloudHTML = `
+        <div class="parent-section">
+          <div class="parent-section-title">🎤 Read Aloud Summary</div>
+          <div class="parent-ra-stats">
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${totalAttempts}</div>
+              <div class="parent-ra-label">Sessions</div>
+            </div>
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${avgAccuracy}%</div>
+              <div class="parent-ra-label">Avg Accuracy</div>
+            </div>
+            <div class="parent-ra-stat">
+              <div class="parent-ra-num">${avgWPM}</div>
+              <div class="parent-ra-label">Avg WPM</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="parent-dashboard">
+        <div class="dash-header">
+          <button class="back-btn" onclick="App.showRemoteViewer()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-light)">←</button>
+          <h2 style="font-size:1.3rem;font-weight:700;color:var(--purple-dark)">Aarya's Progress</h2>
+          <div style="width:32px"></div>
+        </div>
+
+        <div class="remote-badge">
+          📱 Viewing from cloud · Last synced: ${lastSync}
+          <button class="btn btn-secondary btn-small" style="margin-top:8px" onclick="App.refreshRemote()">🔄 Refresh</button>
+        </div>
+
+        <div class="parent-hero slide-up">
+          <div class="parent-hero-star">⭐ ${totalStars}</div>
+          <div class="parent-hero-label">Total Stars Earned</div>
+          <div class="parent-hero-sub">${history.length} questions answered · ${streak.count}-day streak</div>
+        </div>
+
+        ${excellingHTML}
+        ${strugglingHTML}
+        ${notStartedHTML}
+        ${readAloudHTML}
+        ${activityHTML}
       </div>
     `;
   }
@@ -794,6 +1284,9 @@ const Screens = (() => {
     renderProgress,
     renderReadAloud,
     renderReadAloudResults,
-    renderSettings
+    renderSettings,
+    renderParentDashboard,
+    renderRemoteViewer,
+    renderRemoteParentDashboard
   };
 })();

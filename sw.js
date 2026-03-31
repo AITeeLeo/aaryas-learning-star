@@ -1,5 +1,5 @@
 // Service Worker for Aarya's Learning Star PWA
-const CACHE_NAME = 'aaryas-star-v3';
+const CACHE_NAME = 'aaryas-star-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const ASSETS_TO_CACHE = [
   './js/quiz.js',
   './js/screens.js',
   './js/pdf-upload.js',
+  './js/sync.js',
   './js/app.js',
   './manifest.json'
 ];
@@ -46,6 +47,7 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   if (url.hostname === 'api.anthropic.com') return;
+  if (url.hostname.includes('firebaseio.com') || url.hostname.includes('googleapis.com')) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {

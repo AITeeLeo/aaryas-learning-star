@@ -71,6 +71,13 @@ const App = (() => {
         currentScreen = 'results';
         show(Screens.renderResults(results));
 
+        // Log activity
+        const subInfo = SUBJECTS[results.subject];
+        Storage.logActivity({
+          icon: results.score === results.total ? '🏆' : '📝',
+          text: `Completed ${subInfo?.name || results.subject} quiz: ${results.score}/${results.total} correct`
+        });
+
         // Sound + visual celebrations based on score
         const pct = results.score / results.total;
         if (pct === 1) {
@@ -211,6 +218,78 @@ const App = (() => {
       const first = document.getElementById('pin-1');
       if (first) first.focus();
     }, 100);
+  }
+
+  function showParentDashboard() {
+    currentScreen = 'parent-dashboard';
+    show(Screens.renderParentDashboard());
+  }
+
+  // ============================================
+  // CLOUD SYNC
+  // ============================================
+  let lastRemoteCode = null;
+
+  function showRemoteViewer() {
+    currentScreen = 'remote-viewer';
+    show(Screens.renderRemoteViewer());
+  }
+
+  function copyFamilyCode() {
+    const code = CloudSync.getFamilyCode();
+    if (code && navigator.clipboard) {
+      navigator.clipboard.writeText(code).then(() => {
+        const btn = document.querySelector('.family-code-display .btn');
+        if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => btn.textContent = '📋 Copy Code', 2000); }
+      });
+    }
+  }
+
+  function enableSync() {
+    const statusEl = document.getElementById('sync-enable-status');
+    if (statusEl) statusEl.innerHTML = '<div class="upload-status processing">Connecting...</div>';
+
+    const result = CloudSync.enableSync();
+
+    if (result.success) {
+      // Refresh settings view to show the family code
+      settingsAuthenticated = true;
+      show(Screens.renderSettings(true));
+    } else {
+      if (statusEl) statusEl.innerHTML = `<div class="upload-status error">❌ ${result.error}</div>`;
+    }
+  }
+
+  async function fetchRemoteProgress() {
+    const input = document.getElementById('remote-code-input');
+    const statusEl = document.getElementById('remote-viewer-status');
+    if (!input || !input.value.trim()) {
+      if (statusEl) statusEl.innerHTML = '<div class="upload-status error">Please enter a family code.</div>';
+      return;
+    }
+
+    const code = input.value.trim().toUpperCase();
+    lastRemoteCode = code;
+
+    if (statusEl) statusEl.innerHTML = '<div class="upload-status processing">Loading progress...</div>';
+
+    try {
+      const data = await CloudSync.fetchByCode(code);
+      currentScreen = 'remote-dashboard';
+      show(Screens.renderRemoteParentDashboard(data));
+    } catch (err) {
+      if (statusEl) statusEl.innerHTML = `<div class="upload-status error">❌ ${err.message}</div>`;
+    }
+  }
+
+  async function refreshRemote() {
+    if (!lastRemoteCode) return;
+    try {
+      const data = await CloudSync.fetchByCode(lastRemoteCode);
+      show(Screens.renderRemoteParentDashboard(data));
+    } catch (err) {
+      console.error('Refresh failed:', err);
+    }
   }
 
   // ============================================
@@ -429,6 +508,11 @@ const App = (() => {
     document.addEventListener('touchstart', () => Sounds.unlock(), { once: true });
     document.addEventListener('click', () => Sounds.unlock(), { once: true });
 
+    // Initialize cloud sync if configured
+    if (typeof CloudSync !== 'undefined' && CloudSync.isConfigured()) {
+      CloudSync.init();
+    }
+
     // Show home screen
     goHome();
   }
@@ -451,6 +535,12 @@ const App = (() => {
     readAloudQuit,
     showProgress,
     showSettings,
+    showParentDashboard,
+    showRemoteViewer,
+    copyFamilyCode,
+    enableSync,
+    fetchRemoteProgress,
+    refreshRemote,
     submitAnswer,
     submitFillBlank,
     nextQuestion,

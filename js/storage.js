@@ -40,6 +40,10 @@ const Storage = (() => {
   function set(key, value) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      // Trigger cloud sync on data changes (debounced)
+      if (typeof CloudSync !== 'undefined' && CloudSync.isSyncEnabled()) {
+        CloudSync.debouncedSync();
+      }
     } catch (e) {
       console.warn('Storage write failed:', e);
     }
@@ -386,6 +390,29 @@ const Storage = (() => {
     setPIN(pin) { set(KEYS.PIN, pin); },
     getAPIKey() { return get(KEYS.API_KEY, ''); },
     setAPIKey(key) { set(KEYS.API_KEY, key); },
+
+    // PDF text storage (client-side extraction)
+    setUploadedPdfText(text) { set('aarya_pdf_text', text); },
+    getUploadedPdfText() { return get('aarya_pdf_text', ''); },
+
+    // Parent dashboard password
+    getParentPassword() { return get('aarya_parent_pw', null); },
+    setParentPassword(pw) { set('aarya_parent_pw', pw); },
+
+    // Activity log
+    getActivityLog() { return get('aarya_activity_log', []); },
+    logActivity(entry) {
+      const log = this.getActivityLog();
+      log.push({
+        ...entry,
+        timestamp: Date.now(),
+        date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      });
+      // Keep last 100 entries
+      if (log.length > 100) log.splice(0, log.length - 100);
+      set('aarya_activity_log', log);
+    },
 
     getWeeklyQuestions() { return get(KEYS.WEEKLY_QUESTIONS, null); },
     setWeeklyQuestions(questions) {
